@@ -1,0 +1,37 @@
+> tsc && node --loader ts-node/esm src/index.ts --character\=characters/yong.character.json
+
+src/chat/index.ts:5:3 - error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Type 'ReadStream & { fd: 0; }' is not assignable to type 'ReadableStream
+    Type 'ReadStream & { fd: 0; }' is not assignable to type 'ReadableStream'.
+      The types returned by '[Symbol.asyncIterator]()' are incompatible betw
+      The types returned by '[Symbol.asyncIterator]()' are incompatible between these types.
+        Property '[Symbol.asyncDispose]' is missing in type 'AsyncIterableIt
+        Property '[Symbol.asyncDispose]' is missing in type 'AsyncIterableIterator<any>' but required in type 'AsyncIterator<string | Buffer, any, any>'
+        Property '[Symbol.asyncDispose]' is missing in type 'AsyncIterableIterator<any>' but required in type 'AsyncIterator<string | Buffer, any, any>'.
+
+5   input: process.stdin,
+    ~~~~~
+
+  node_modules/.pnpm/typescript@5.6.3/node_modules/typescript/lib/lib.esnext
+  node_modules/.pnpm/typescript@5.6.3/node_modules/typescript/lib/lib.esnext.disposable.d.ts:40:5
+    40     [Symbol.asyncDispose](): PromiseLike<void>;
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    '[Symbol.asyncDispose]' is declared here.
+  node_modules/.pnpm/@types+node@22.7.5/node_modules/@types/node/readline.d.
+  node_modules/.pnpm/@types+node@22.7.5/node_modules/@types/node/readline.d.ts:317:9
+    317         input: NodeJS.ReadableStream;
+                ~~~~~
+    The expected type comes from property 'input' which is declared here on 
+    The expected type comes from property 'input' which is declared here on type 'ReadLineOptions'
+  node_modules/.pnpm/@types+node@22.7.5/node_modules/@types/node/readline.d.
+  node_modules/.pnpm/@types+node@22.7.5/node_modules/@types/node/readline.d.ts:377:21
+    377     export function createInterface(options: ReadLineOptions): Inter
+    377     export function createInterface(options: ReadLineOptions): Interface;
+                            ~~~~~~~~~~~~~~~
+    The last overload is declared here.
+
+
+Found 1 error in src/chat/index.ts:5
+
+ ELIFECYCLE  Command failed with exit code 2.
