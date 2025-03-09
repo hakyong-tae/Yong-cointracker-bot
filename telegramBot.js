@@ -13,6 +13,7 @@ const provider = new ethers.JsonRpcProvider(`https://mainnet.infura.io/v3/${INFU
 const WEBHOOK_URL = process.env.WEBHOOK_URL;  // Render에서 환경 변수로 설정할 예정
 
 
+
 let watchlist = new Set(); // Wallets to monitor
 let lastPrice = 0;
 let priceAlertThreshold = null;
@@ -26,7 +27,7 @@ const PORT = process.env.PORT || 3000;
 app.use(bodyParser.json());
 
 // Telegram Webhook 설정
-app.post(`/webhook/${BOT_TOKEN}`, async (req, res) => {
+app.post(`/webhook/${TELEGRAM_BOT_TOKEN}`, async (req, res) => {
     const { message } = req.body;
     if (message) {
         const chatId = message.chat.id;
@@ -45,8 +46,8 @@ app.listen(PORT, async () => {
     console.log(`🚀 Telegram bot is running on port ${PORT}`);
 
     try {
-        await axios.post(`${API_URL}/setWebhook`, { url: `${WEBHOOK_URL}/webhook/${BOT_TOKEN}` });
-        console.log(`✅ Webhook set to: ${WEBHOOK_URL}/webhook/${BOT_TOKEN}`);
+        await axios.post(`${API_URL}/setWebhook`, { url: `${WEBHOOK_URL}/webhook/${TELEGRAM_BOT_TOKEN}` });
+        console.log(`✅ Webhook set to: ${WEBHOOK_URL}/webhook/${TELEGRAM_BOT_TOKEN}`);
     } catch (error) {
         console.error("❌ Failed to set webhook:", error.response ? error.response.data : error.message);
     }
