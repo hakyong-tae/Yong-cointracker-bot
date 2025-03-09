@@ -1,4 +1,5 @@
 import 'dotenv/config'; // dotenv 설정 추가
+import { Bot } from "node-telegram-bot-api";
 import fetch from 'node-fetch';
 import axios from 'axios';
 import { ethers } from "ethers";
@@ -11,6 +12,7 @@ const INFURA_API_KEY = process.env.INFURA_API_KEY;
 const API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 const provider = new ethers.JsonRpcProvider(`https://mainnet.infura.io/v3/${INFURA_API_KEY}`);
 const WEBHOOK_URL = process.env.WEBHOOK_URL;  // Render에서 환경 변수로 설정할 예정
+const bot = new Bot(TELEGRAM_BOT_TOKEN);
 
 
 
@@ -23,7 +25,6 @@ let lastUpdateId = 0;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
 app.use(bodyParser.json());
 // 📌 Telegram Webhook 설정 (Render에서 사용)
 app.use(express.json());
