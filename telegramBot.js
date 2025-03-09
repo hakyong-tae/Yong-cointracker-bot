@@ -1,5 +1,5 @@
 import 'dotenv/config'; // dotenv 설정 추가
-import { Bot } from "node-telegram-bot-api";
+import TelegramBot from "node-telegram-bot-api";
 import fetch from 'node-fetch';
 import axios from 'axios';
 import { ethers } from "ethers";
@@ -11,8 +11,8 @@ const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY;
 const INFURA_API_KEY = process.env.INFURA_API_KEY;
 const API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 const provider = new ethers.JsonRpcProvider(`https://mainnet.infura.io/v3/${INFURA_API_KEY}`);
-const WEBHOOK_URL = process.env.WEBHOOK_URL;  // Render에서 환경 변수로 설정할 예정
-const bot = new Bot(TELEGRAM_BOT_TOKEN);
+const WEBHOOK_URL = process.env.WEBHOOK_URL;  // Render에서 환경변수로 설정할 예정
+const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: false });
 
 
 
@@ -26,12 +26,7 @@ let lastUpdateId = 0;
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.use(bodyParser.json());
-// 📌 Telegram Webhook 설정 (Render에서 사용)
-app.use(express.json());
-app.post(`/webhook/${TELEGRAM_BOT_TOKEN}`, (req, res) => {
-    bot.processUpdate(req.body);
-    res.sendStatus(200);
-});
+
 
 
 // 📌 Set webhook when server starts
@@ -39,8 +34,9 @@ app.listen(PORT, async () => {
     console.log(`🚀 Telegram bot is running on port ${PORT}`);
 
     try {
-        await axios.post(`${API_URL}/setWebhook`, { url: `${WEBHOOK_URL}/webhook/${TELEGRAM_BOT_TOKEN}` });
+        const response = await axios.post(`${API_URL}/setWebhook`, { url: `${WEBHOOK_URL}/webhook/${TELEGRAM_BOT_TOKEN}` });
         console.log(`✅ Webhook set to: ${WEBHOOK_URL}/webhook/${TELEGRAM_BOT_TOKEN}`);
+        console.log(`🔄 Webhook response:`, response.data);
     } catch (error) {
         console.error("❌ Failed to set webhook:", error.response ? error.response.data : error.message);
     }
@@ -49,22 +45,17 @@ app.listen(PORT, async () => {
 // 📌 Handle incoming messages
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
-    const text = msg.text.trim().toLowerCase();
+    const text = msg.text.trim();
     console.log(`📩 New message received: ${text}`);
 
     if (text === "/start") {
         await handleStartCommand(chatId);
     } else if (text.startsWith("/gasalert ")) {
-        const gasPrice = parseFloat(text.split(" ")[1]);
-        if (isNaN(gasPrice)) {
-            await sendMessage(chatId, "⚠️ Please enter a valid gas price. Example: `/gasalert 30`");
-        } else {
-            await handleGasAlertCommand(chatId, gasPrice);
-        }
+        await handleGasAlertCommand(chatId, parseFloat(text.split(' ')[1]));
     } else if (text.startsWith("/gas")) {
         await handleGasCommand(chatId);
     } else if (text.startsWith("/alert ")) {
-        const price = parseFloat(text.split(" ")[1]);
+        const price = parseFloat(text.split(' ')[1]);
         if (isNaN(price)) {
             await sendMessage(chatId, "⚠️ Please enter a valid price. Example: `/alert 2500`");
         } else {
@@ -73,7 +64,7 @@ bot.on('message', async (msg) => {
     } else if (text.startsWith("/newwallet")) {
         await handleNewWalletCommand(chatId);
     } else if (text.startsWith("/balance ")) {
-        const walletAddress = text.split(" ")[1];
+        const walletAddress = text.split(' ')[1];
         if (!walletAddress || !ethers.isAddress(walletAddress)) {
             await sendMessage(chatId, "⚠️ Please enter a valid Ethereum address. Example: `/balance 0x123...abc`");
         } else {
@@ -98,25 +89,18 @@ bot.on('message', async (msg) => {
             await handleWatchCommand(chatId, walletAddress);
         }
     } else if (text.startsWith("/pricemonitor")) {
-        await handlePriceMonitorCommand(chatId);
+        await handlePriceMonitorCommand(chatId);    
     } else {
-        await sendMessage(chatId, "⚠️ Unknown command. Type `/start` to see available commands.");
+        await sendMessage(chatId, "⚠️ Unknown command. Type `/start` to see the available commands.");
     }
 });
 
-
-// 📌 Handle incoming webhook messages
-app.post('/webhook', async (req, res) => {
-    console.log('📩 Webhook received:', req.body);
-
-    if (req.body.message) {
-        await handleIncomingMessage(req.body);
-    }
-
-    res.sendStatus(200); // ✅ Respond OK to Telegram
+// 📌 Telegram Webhook 설정 (Render에서 사용)
+app.use(express.json());
+app.post(`/webhook/${TELEGRAM_BOT_TOKEN}`, (req, res) => {
+    bot.processUpdate(req.body);
+    res.sendStatus(200);
 });
-
-
 
 // 📌 Handle /newwallet command
 async function handleNewWalletCommand(chatId) {
@@ -138,15 +122,12 @@ async function handleNewWalletCommand(chatId) {
 // 📌 Send a message to Telegram chat
 async function sendMessage(chatId, text) {
     try {
-        await fetch(`${API_URL}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId, text: text })
-        });
+        await bot.sendMessage(chatId, text);
     } catch (error) {
         console.error('🚨 Error sending message:', error);
     }
 }
+
 
 // 📌 Handle /start command
 async function handleStartCommand(chatId) {
@@ -510,58 +491,6 @@ async function handleTransactionsCommand(chatId, walletAddress) {
     }
 }
 
-// 📌 Handle messages
-async function handleIncomingMessage(update) {
-    if (!update.message) return;
-    const chatId = update.message.chat.id;
-    const text = update.message.text.trim();
-    console.log(`📩 New message received: ${text}`);
-
-    if (text.startsWith('/start')) {
-        await handleStartCommand(chatId);
-    } else if (text.startsWith('/gasalert ')) {
-        await handleGasAlertCommand(chatId, parseFloat(text.split(' ')[1]));
-    } else if (text === '/gasalert') {
-        await sendMessage(chatId, "⚠️ Please provide a gas price for alert. Example: `/gasalert 30`");
-    } else if (text.startsWith('/gas')) {
-        await handleGasCommand(chatId);
-    } else if (text.startsWith('/alert ')) {
-        const price = parseFloat(text.split(' ')[1]);
-        if (isNaN(price)) {
-            await sendMessage(chatId, "⚠️ Please enter a valid price. Example: `/alert 2500`");
-        } else {
-            await handlePriceAlertCommand(chatId, price);
-        }
-    } else if (text.startsWith('/newwallet')) {
-        await handleNewWalletCommand(chatId);
-    } else if (text.startsWith('/portfolio ')) {
-        await handlePortfolioCommand(chatId, text.split(' ')[1]);
-    } else if (text.startsWith('/transactions ')) {
-        const walletAddress = text.split(' ')[1];
-        if (!walletAddress || !ethers.isAddress(walletAddress)) {
-            await sendMessage(chatId, "⚠️ Please enter a valid Ethereum address. Example: `/transactions 0x123...abc`");
-        } else {
-            await handleTransactionsCommand(chatId, walletAddress);
-        }
-    }     else if (text.startsWith('/watch ')) {
-        const walletAddress = text.split(' ')[1];
-        await handleWatchCommand(chatId, walletAddress);
-    } else if (text.startsWith('/tokens ')) {
-        const walletAddress = text.split(' ')[1];
-        await handleTokensCommand(chatId, walletAddress);
-    } else if (text.startsWith('/pricemonitor')) {
-        await handlePriceMonitorCommand(chatId);
-    } else if (text.startsWith('/balance ')) {
-        const walletAddress = text.split(' ')[1];
-        if (!walletAddress || !ethers.isAddress(walletAddress)) {
-            await sendMessage(chatId, "⚠️ Please enter a valid Ethereum address. Example: `/balance 0x123...abc`");
-        } else {
-            await handleBalanceCommand(chatId, walletAddress);
-        }
-    } else {
-        await sendMessage(chatId, "⚠️ Unknown command. Type `/start` to see the available commands.");
-    }
-}
 
 
 // 📌 Start bot & schedule checks
