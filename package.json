@@ -4,7 +4,7 @@
   "main": "src/index.ts",
   "type": "module",
   "scripts": {
- "postinstall": "sh scripts/remove_youtube-dl-exec.sh"
+ "postinstall": "sh scripts/remove_youtube-dl-exec.sh",
     "build": "tsup src/index.ts --format esm --dts",
     "start": "tsc && node --loader ts-node/esm src/index.ts",
     "clean": "./scripts/clean.sh",
