@@ -1,3 +1,23 @@
+# 👋 Hello, I'm Hakyong Tae!
+
+I'm building bots and tools that make crypto more accessible and fun.
+
+## 🚀 Projects
+- 🧠 [Yong CoinTracker Bot](https://github.com/hakyong-tae/yong-cointracker-bot)  
+  A Telegram bot that monitors ETH, SOL, gas fees, and prices — powered by CoinGecko & Etherscan.
+
+## 🔧 Tech Stack
+`Node.js` | `Telegram Bot API` | `Solana` | `Web3` | `Git` | `Render`
+
+## 📈 Currently Learning
+- Smart contract deployment on Solana
+- Airdrop automation systems
+- Interactive crypto mini-games
+
+## 📫 Contact
+- Email: hy.tae@kakao.com
+
+
 # 🧠 Yong CoinTracker Bot
 
 A feature-rich Telegram bot for crypto wallet monitoring, gas fee tracking, coin price alerts, and chart visualizations.  
