@@ -1,5 +1,77 @@
-# Eliza
+# 🧠 Yong CoinTracker Bot
 
+A feature-rich Telegram bot for crypto wallet monitoring, gas fee tracking, coin price alerts, and chart visualizations.  
+Built on top of Eliza Starter and customized for the **Yong AI** ecosystem.
+
+---
+
+## 🚀 Features
+
+| Category | Command | Description |
+|---------|---------|-------------|
+| 🧾 Wallet Tools | `/newwallet` | Generates a new Ethereum wallet |
+| 💰 Balances | `/balance <address>` | Shows ETH balance |
+| 💼 Portfolio | `/portfolio <address>` | Displays ETH, USDT, and ERC-20 holdings |
+| 📦 Tokens | `/tokens <address>` | Lists all tokens |
+| 🔍 TX Monitor | `/transactions <address>` | Recent transactions |
+| 🔔 Alert | `/watch <address>` | Real-time alerts on transactions |
+| 📈 Prices | `/price <symbol>` | Shows current coin price |
+| 📊 Charts | `/price_chart <symbol>` | 7-day line chart of coin price |
+| 💹 Bulk Prices | `/price_all` | Shows prices of 10 supported coins |
+| 🪙 Coin List | `/supported_coins` | Lists all supported coin symbols |
+| ⛽ Gas | `/gas`, `/gasalert <GWEI>` | Tracks and alerts Ethereum gas fees |
+| 📡 ETH Alerts | `/alert <price>` | ETH price alerts |
+| 🤖 Start | `/start` | Shows command overview |
+
+---
+
+## ✅ Supported Coins
+
+eth, btc, sol, matic, doge, bonk, wncg, usdt, apt, bnb
+
+yaml
+복사
+편집
+
+> Full names are mapped internally via `symbolToIdMap` using CoinGecko IDs.
+
+---
+
+## 📦 Stack
+
+- Node.js (ESM)
+- Telegram Bot API (`node-telegram-bot-api`)
+- CoinGecko API
+- Axios
+- Chart.js (via `canvas`)
+- Express (for webhook)
+- Render.com (deployment)
+
+---
+
+## 🛠️ Local Development
+
+```bash
+git clone https://github.com/hakyong-tae/yong-cointracker-bot.git
+cd yong-cointracker-bot
+npm install
+node telegramBot.js
+Use .env to store TELEGRAM_BOT_TOKEN and WEBHOOK_URL.
+
+🧪 Environment Switch
+js
+복사
+편집
+const isDev = process.env.NODE_ENV !== "production";
+const bot = new TelegramBot(TOKEN, { polling: isDev });
+Automatically switches between polling (dev) and webhook (prod).
+
+🧊 License
+MIT
+
+
+# Eliza
+ㅁ
 ## Edit the character files
 
 Open `src/character.ts` to modify the default character. Uncomment and edit.
