@@ -1,20 +1,49 @@
-import 'dotenv/config'; // dotenv 설정 추가
+// 환경 설정 및 모듈 로딩
 import TelegramBot from "node-telegram-bot-api";
-import fetch from 'node-fetch';
-import axios from 'axios';
+import express from "express";
+import axios from "axios";
+import bodyParser from "body-parser";
 import { ethers } from "ethers";
-import express from 'express';
-import bodyParser from 'body-parser';
+import dotenv from "dotenv";
+dotenv.config();
 
+// 전역 설정
+const app = express();
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const WEBHOOK_URL = process.env.WEBHOOK_URL;
 const ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY;
-const INFURA_API_KEY = process.env.INFURA_API_KEY;
 const API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
-const provider = new ethers.JsonRpcProvider(`https://mainnet.infura.io/v3/${INFURA_API_KEY}`);
-const WEBHOOK_URL = process.env.WEBHOOK_URL;  // Render에서 환경변수로 설정할 예정
-const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: false });
+const PORT = process.env.PORT || 3000;
+const isDev = process.env.NODE_ENV !== "production";
 
+// 봇 인스턴스 생성
+const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: isDev });
 
+// 웹훅 모드일 경우만 Express 서버 실행 및 webhook 등록
+if (!isDev) {
+    app.use(bodyParser.json());
+  
+    app.post(`/webhook/${TELEGRAM_BOT_TOKEN}`, (req, res) => {
+      bot.processUpdate(req.body);
+      res.sendStatus(200);
+    });
+  
+    app.listen(PORT, async () => {
+      console.log(`🚀 Bot is live on port ${PORT}`);
+  
+      try {
+        const webhookURL = `${WEBHOOK_URL}/webhook/${TELEGRAM_BOT_TOKEN}`;
+        const response = await axios.post(`${API_URL}/setWebhook`, { url: webhookURL });
+        console.log(`✅ Webhook set to: ${webhookURL}`);
+        console.log("🔄 Telegram API response:", response.data);
+      } catch (error) {
+        console.error("❌ Failed to set webhook:", error.response?.data || error.message);
+      }
+    });
+  } else {
+    console.log("🧪 Running in development mode (polling enabled)");
+  }
+  
 
 let watchlist = new Set(); // Wallets to monitor
 let lastPrice = 0;
@@ -23,24 +52,6 @@ let chatIdForPriceAlert = null;
 let chatIdForGasAlert = null;
 let lastUpdateId = 0; 
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-app.use(bodyParser.json());
-
-
-
-// 📌 Set webhook when server starts
-app.listen(PORT, async () => {
-    console.log(`🚀 Telegram bot is running on port ${PORT}`);
-
-    try {
-        const response = await axios.post(`${API_URL}/setWebhook`, { url: `${WEBHOOK_URL}/webhook/${TELEGRAM_BOT_TOKEN}` });
-        console.log(`✅ Webhook set to: ${WEBHOOK_URL}/webhook/${TELEGRAM_BOT_TOKEN}`);
-        console.log(`🔄 Webhook response:`, response.data);
-    } catch (error) {
-        console.error("❌ Failed to set webhook:", error.response ? error.response.data : error.message);
-    }
-});
 
 // 📌 Handle incoming messages
 bot.on('message', async (msg) => {
@@ -87,14 +98,37 @@ bot.on('message', async (msg) => {
             await sendMessage(chatId, "⚠️ Please enter a valid Ethereum address. Example: `/watch 0x123...abc`");
         } else {
             await handleWatchCommand(chatId, walletAddress);
-        }
+        }  
+    } else if (text.startsWith("/price_all")) {
+        await handlePriceAllCommand(chatId);
+    
     } else if (text.startsWith("/pricemonitor")) {
-        await handlePriceMonitorCommand(chatId);    
-    } else {
+        await handlePriceMonitorCommand(chatId);
+    
+    } else if (text.startsWith("/price")) {
+        const parts = text.trim().split(" ");
+        if (parts.length === 2) {
+            const symbol = parts[1];
+            await handlePriceSymbolCommand(chatId, symbol);
+        }
+    }
+    
+     else {
         await sendMessage(chatId, "⚠️ Unknown command. Type `/start` to see the available commands.");
     }
 });
-
+const symbolToIdMap = {
+    eth: "ethereum",
+    sol: "solana",
+    btc: "bitcoin",
+    wncg: "wrapped-ncg",
+    doge: "dogecoin",
+    bonk: "bonk",
+    matic: "matic-network",
+    usdt: "tether",
+    apt: "aptos",
+    bnb: "binancecoin"
+  };
 // 📌 Telegram Webhook 설정 (Render에서 사용)
 app.use(express.json());
 app.post(`/webhook/${TELEGRAM_BOT_TOKEN}`, (req, res) => {
@@ -102,6 +136,105 @@ app.post(`/webhook/${TELEGRAM_BOT_TOKEN}`, (req, res) => {
     res.sendStatus(200);
 });
 
+// 🔁 간단한 캐시 시스템 (메모리 기반)
+const chartCache = new Map();
+
+async function getCachedChartData(coinId, duration = 60 * 1000) {
+  const now = Date.now();
+  if (chartCache.has(coinId)) {
+    const { timestamp, data } = chartCache.get(coinId);
+    if (now - timestamp < duration) return data;
+  }
+
+  // ✅ 1초 딜레이 (rate limit 피하기 위함)
+  await new Promise(resolve => setTimeout(resolve, 1000));
+
+  const res = await axios.get(`https://api.coingecko.com/api/v3/coins/${coinId}/market_chart`, {
+    params: { vs_currency: "usd", days: 7 }
+  });
+  chartCache.set(coinId, { timestamp: now, data: res.data });
+  return res.data;
+}
+
+bot.onText(/\/supported_coins/, async (msg) => {
+    const chatId = msg.chat.id;
+  
+    const supportedCoins = [
+      { symbol: "eth", name: "Ethereum" },
+      { symbol: "btc", name: "Bitcoin" },
+      { symbol: "sol", name: "Solana" },
+      { symbol: "wncg", name: "WNCG" },
+      { symbol: "doge", name: "Dogecoin" },
+      { symbol: "bonk", name: "Bonk" },
+      { symbol: "matic", name: "Polygon (MATIC)" },
+      { symbol: "usdt", name: "Tether (USDT)" },
+      { symbol: "apt", name: "Aptos" },
+      { symbol: "bnb", name: "BNB" }
+    ];
+  
+    let message = "✅ *Supported Coins:*\n\n";
+    message += supportedCoins.map(c => `- \`${c.symbol}\`: ${c.name}`).join("\n");
+  
+    await bot.sendMessage(chatId, message, { parse_mode: "Markdown" });
+  });
+  
+bot.onText(/^\/price_chart$/, async (msg) => {
+    const chatId = msg.chat.id;
+    const supportedSymbols = Object.keys(symbolToIdMap).join(", ");
+    await bot.sendMessage(chatId, `📊 Please provide a coin symbol.\nSupported symbols: ${supportedSymbols}\n\nExample: /price_chart eth`);
+  });
+  
+// 📈 /price_chart <symbol>
+bot.onText(/\/price_chart (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const symbol = match[1].toLowerCase();
+  
+    console.log("📩 /price_chart command received:", symbol);
+  
+    const coinId = symbolToIdMap[symbol];
+  
+    if (!coinId) {
+      await bot.sendMessage(chatId, `❌ Unknown coin symbol: "${symbol}". Please try again.`);
+      return;
+    }
+  
+    try {
+      const data = await getCachedChartData(coinId);
+      const prices = data.prices;
+  
+      const labels = prices.map(p =>
+        new Date(p[0]).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      );
+      const values = prices.map(p => p[1]);
+  
+      const chartUrl = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify({
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label: `${symbol.toUpperCase()} Price (7D)`,
+            data: values,
+            fill: true,
+            borderColor: "orange",
+            backgroundColor: "rgba(255,165,0,0.2)"
+          }]
+        }
+      }))}`;
+  
+      await bot.sendPhoto(chatId, chartUrl, {
+        caption: `📈 ${symbol.toUpperCase()} 7-Day Price Chart`
+      });
+  
+    } catch (err) {
+      console.error("❌ Failed to fetch coin price:", err);
+      if (err.response?.status === 429) {
+        await bot.sendMessage(chatId, "⚠️ Sorry, the chart couldn't be loaded right now. Please try again in a few moments.");
+      } else {
+        await bot.sendMessage(chatId, "⚠️ Failed to load the chart. Please try again with a different symbol.");
+      }
+    }
+  });
+  
 // 📌 Handle /newwallet command
 async function handleNewWalletCommand(chatId) {
     try {
@@ -144,11 +277,19 @@ async function handleStartCommand(chatId) {
     + `  - /gas → Get current Ethereum gas fees\n`
     + `  - /gasalert <GAS_PRICE> → Set a gas price alert\n`
     + `  - /watch <ETH_ADDRESS> → Monitor transactions for a wallet\n`
+    + `  - /price - Check the current price of Ethereum (ETH) and Solana (SOL) 🪙\n`
+    + `  - /price_all - View a list of top tokens including ETH, SOL, BTC, WNCG, DOGE, and more 🪙\n `
+    + `  - /supported_coins - View all supported coin symbols and names\n`
+    + `  - /price_chart <symbol> - View a 7-day price chart image of a specific coin 📈\n`
     + `  - /pricemonitor → Monitor ETH price changes\n\n`
     + `💡 Type a command to get started!`;
 
     await sendMessage(chatId, message);
 }
+
+
+
+
 
 // 📌 Handle /balance command
 async function handleBalanceCommand(chatId, ethAddress) {
@@ -164,6 +305,31 @@ async function handleBalanceCommand(chatId, ethAddress) {
         await sendMessage(chatId, "🚨 Error fetching balance.");
     }
 }
+
+async function handlePriceSymbolCommand(chatId, symbol) {
+    try {
+        const coinId = symbolToIdMap[symbol.toLowerCase()];
+
+        if (!coinId) {
+            await bot.sendMessage(chatId, `❌ Unsupported symbol: "${symbol}". Type /supported_coins to see available coins.`);
+            return;
+        }
+
+        const priceRes = await axios.get(`https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`);
+        const price = priceRes.data[coinId]?.usd;
+
+        if (price === undefined) {
+            await bot.sendMessage(chatId, `⚠️ Price not available for ${symbol.toUpperCase()}.`);
+            return;
+        }
+
+        await bot.sendMessage(chatId, `💰 ${symbol.toUpperCase()}: $${price}`);
+    } catch (error) {
+        console.error("❌ Failed to fetch coin price:", error);
+        await bot.sendMessage(chatId, "⚠️ Error fetching coin price.");
+    }
+}
+
 
 // 📌 Handle /watch command 
 async function handleWatchCommand(chatId, walletAddress) {
@@ -224,6 +390,37 @@ async function handleGasCommand(chatId) {
         await sendMessage(chatId, "⚠️ Failed to fetch gas prices.");
     }
 }
+// 📌 Handle /price_all command
+async function handlePriceAllCommand(chatId) {
+    try {
+        const url = 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum,solana,bitcoin,wrapped-ncg,dogecoin,bonk,matic-network,tether,aptos,binancecoin&vs_currencies=usd';
+        const response = await axios.get(url);
+        const prices = response.data;
+
+        const getPrice = (id) => prices[id]?.usd ?? "N/A";
+
+const formatted = `
+📊 Current Crypto Prices:
+🔹 Ethereum (ETH): $${getPrice("ethereum")}
+🔹 Solana (SOL): $${getPrice("solana")}
+🔹 Bitcoin (BTC): $${getPrice("bitcoin")}
+🔹 WNCG: $${getPrice("wrapped-ncg")}
+🔹 Dogecoin (DOGE): $${getPrice("dogecoin")}
+🔹 Bonk (BONK): $${getPrice("bonk")}
+🔹 Polygon (pol-ex-matic): $${getPrice("matic-network")}
+🔹 Tether (USDT): $${getPrice("tether")}
+🔹 Aptos (APT): $${getPrice("aptos")}
+🔹 Binance Coin (BNB): $${getPrice("binancecoin")}
+`;
+
+        await bot.sendMessage(chatId, formatted);
+    } catch (error) {
+        console.error("❌ Failed to fetch all prices:", error);
+        await bot.sendMessage(chatId, "⚠️ Failed to fetch full price list.");
+    }
+}
+
+
 // 📌 Handle /portfolio command 
 async function handlePortfolioCommand(chatId, walletAddress) {
     if (!ethers.isAddress(walletAddress)) {
@@ -294,6 +491,25 @@ async function handleGasAlertCommand(chatId, gasPrice) {
 }
 
 
+// 📌 Handle /price command
+async function handlePriceCommand(chatId) {
+    const url = 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum,solana&vs_currencies=usd';
+
+    try {
+        const response = await axios.get(url);
+        const eth = response.data.ethereum.usd;
+        const sol = response.data.solana.usd;
+
+        const message = `📊 현재 암호화폐 시세:\n` +
+                        `🔹 Ethereum (ETH): $${eth}\n` +
+                        `🔹 Solana (SOL): $${sol}`;
+
+        await sendMessage(chatId, message);
+    } catch (error) {
+        console.error("🚨 Error fetching ETH/SOL prices:", error);
+        await sendMessage(chatId, "⚠️ 가격 정보를 가져오는 데 실패했습니다.");
+    }
+}
 
 async function checkGasPrice() {
     try {
